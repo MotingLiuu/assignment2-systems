@@ -18,7 +18,7 @@ class ModelConfig(BaseModel):
     num_layers: int = Field(gt=0, description="Number of layers in the model")
     num_heads: int = Field(gt=0, description="Number of attention heads")
     d_ff: int = Field(gt=0, description="Dimension of the feedforward network")
-    rope_theta: bool = Field(default=False, description="Use RoPE positional encoding")
+    rope_theta: float = Field(default=10000, description="Use RoPE positional encoding")
 
 
 def init_model(config: ModelConfig) -> nn.Module:
