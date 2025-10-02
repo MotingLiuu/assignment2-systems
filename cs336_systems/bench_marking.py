@@ -29,14 +29,37 @@ def random_batch(config: ModelConfig, batch_size: int) -> torch.Tensor:
     return torch.randint(0, config.vocab_size, (batch_size, config.context_length))
 
 
-def benchmark_model(model: nn.Module, data: torch.Tensor, num_warmup: int = 0, num_execution: int = 0) -> float:
+def benchmark_model(
+    model: nn.Module, data: torch.Tensor, back: bool = False, num_warmup: int = 0, num_execution: int = 0
+) -> float:
+    batch_tensor, targets = data[:, :-1], data[:, 1:]
+    warmup_times, exec_times = [], []
+
     for _ in range(num_warmup):
-        model.forward(data)
+        sta_time = timeit.default_timer()
+        model.forward(batch_tensor)
+        torch.cuda.synchronize() if torch.cuda.is_available() else None
+        end_time = timeit.default_timer()
+        warmup_times.append(end_time - sta_time)
+    logger.info(f"Done Warmup times: {warmup_times}")
 
-    exec_time = 0
     for _ in range(num_execution):
-        exec_time += timeit.timeit(lambda: model.forward(data), setup=lambda: torch.cuda.synchronize(), number=1)
-    logger.info(f"Execution time over {num_execution} runs: {exec_time:.6f} seconds")
-    logger.info(f"Average time per run: {exec_time / num_execution:.6f} seconds")
+        sta_time = timeit.default_timer()
+        logits = model.forward(batch_tensor)
 
-    return exec_time / num_execution
+        if back:
+            loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+            loss.backward()
+
+        end_time = timeit.default_timer()
+        exec_times.append(end_time - sta_time)
+    logger.info(f"Done Execution times: {exec_times}")
+
+    logger.info(
+        f"Avg Warmup time: {sum(warmup_times) / len(warmup_times) if warmup_times else 0}, the standard deviation: {torch.std(torch.tensor(warmup_times)) if warmup_times else 0}"
+    )
+    logger.info(
+        f"Avg Execution time: {sum(exec_times) / len(exec_times) if exec_times else 0}, Back: {back}, the standard deviation: {torch.std(torch.tensor(exec_times)) if exec_times else 0}"
+    )
+
+    return sum(exec_times) / len(exec_times) if exec_times else 0
