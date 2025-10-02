@@ -49,7 +49,7 @@ class benchmarking:
             model.to(device)
             logger.info(f"Initialized model with config: {config}")
             random_data = benchmark.random_batch(config, batch_size)
-            random_data.to(device)
+            random_data = random_data.to(device)
             benchmark.benchmark_model(model, random_data, back, num_warmup, num_execution)
 
 
