@@ -1,7 +1,21 @@
+import torch
 from cs336_systems import bench_marking as benchmark
 from typing import Iterable, Iterator
 import logging
+import pandas as pd
 import argparse
+
+
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
+device = get_device()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -9,6 +23,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+logger.info(f"Using device: {device}")
 
 
 def get_args():
@@ -30,8 +46,10 @@ class benchmarking:
     def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1) -> None:
         for config in self.configs:
             model = benchmark.init_model(config)
+            model.to(device)
             logger.info(f"Initialized model with config: {config}")
             random_data = benchmark.random_batch(config, batch_size)
+            random_data.to(device)
             benchmark.benchmark_model(model, random_data, back, num_warmup, num_execution)
 
 
