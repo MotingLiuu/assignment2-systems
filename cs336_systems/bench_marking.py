@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Use Pydantic BaseModel to define the model configuration
 class ModelConfig(BaseModel):
     vocab_size: int = Field(gt=0, description="Size of the vocabulary")
     context_length: int = Field(gt=0, description="Length of the context")
@@ -20,11 +21,12 @@ class ModelConfig(BaseModel):
     d_ff: int = Field(gt=0, description="Dimension of the feedforward network")
     rope_theta: float = Field(default=10000, description="Use RoPE positional encoding")
 
-
+# Create a model to benchmark
 def init_model(config: ModelConfig) -> nn.Module:
-    return cs336_basics.model.BasicsTransformerLM(**config.model_dump())
+    # model_dump is a method provided by Pydantic BaseModel that returns the model's data as a dictionary
+    return cs336_basics.model.BasicsTransformerLM(**config.model_dump()) 
 
-
+# Generate random input data for benchmarking
 def random_batch(config: ModelConfig, batch_size: int) -> torch.Tensor:
     return torch.randint(0, config.vocab_size, (batch_size, config.context_length))
 
@@ -51,6 +53,7 @@ def benchmark_model(
             loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
             loss.backward()
 
+        torch.cuda.synchronize() if torch.cuda.is_available() else None
         end_time = timeit.default_timer()
         exec_times.append(end_time - sta_time)
     logger.info(f"Done Execution times: {exec_times}")
