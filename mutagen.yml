@@ -1,0 +1,33 @@
+#sync:
+#  # 第一个同步配置
+#  code:
+#    alpha: "./cs336_systems/"
+#    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/cs336_systems"
+#    configuration:
+#      ignore:
+#        vcs: true
+#        paths:
+#          - "**/__pycache__"
+#          - ".git"
+#
+#  # 第二个同步配置
+#  experiments:
+#    alpha: "./experiments"
+#    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/experiments"
+
+sync:
+  # 修正：直接在 defaults 下写 ignore，去掉了 configuration 这一层
+  defaults:
+    ignore:
+      vcs: true
+      paths:
+        - "**/__pycache__"
+        - ".DS_Store"
+
+  code:
+    alpha: "./cs336_systems/"
+    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/cs336_systems/cs336_syatems"
+
+  results:
+    alpha: "./experiments"
+    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/experiments"
