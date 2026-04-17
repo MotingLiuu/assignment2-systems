@@ -5,6 +5,8 @@ from collections import Counter, defaultdict
 from typing import Iterable, Iterator
 from pydantic import BaseModel, Field, field_validator
 import cs336_basics
+import pandas as pd
+import os
 
 import logging
 
@@ -33,7 +35,7 @@ def random_batch(config: ModelConfig, batch_size: int) -> torch.Tensor:
 
 def benchmark_model(
     model: nn.Module, data: torch.Tensor, back: bool = False, num_warmup: int = 0, num_execution: int = 0
-) -> float:
+) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
 
@@ -57,12 +59,46 @@ def benchmark_model(
         end_time = timeit.default_timer()
         exec_times.append(end_time - sta_time)
     logger.info(f"Done Execution times: {exec_times}")
+    assert len(warmup_times) == num_warmup, f"Expected {num_warmup} warmup times, got {len(warmup_times)}"
+    assert len(exec_times) == num_execution, f"Expected {num_execution} execution times, got {len(exec_times)}"
 
-    logger.info(
-        f"Avg Warmup time: {sum(warmup_times) / len(warmup_times) if warmup_times else 0}, the standard deviation: {torch.std(torch.tensor(warmup_times)) if warmup_times else 0}"
-    )
-    logger.info(
-        f"Avg Execution time: {sum(exec_times) / len(exec_times) if exec_times else 0}, Back: {back}, the standard deviation: {torch.std(torch.tensor(exec_times)) if exec_times else 0}"
-    )
+    avg_warmup = sum(warmup_times) / len(warmup_times) if warmup_times else 0
+    std_warmup = float(torch.std(torch.tensor(warmup_times))) if warmup_times else 0
+    avg_exec = sum(exec_times) / len(exec_times) if exec_times else 0
+    std_exec = float(torch.std(torch.tensor(exec_times[1:]))) if len(exec_times) > 1 else 0
 
-    return sum(exec_times) / len(exec_times) if exec_times else 0
+    logger.info(f"Avg Warmup time: {avg_warmup}, the standard deviation: {std_warmup}\n")
+    logger.info(f"Avg Execution time: {avg_exec}, Back: {back}\n")
+    if len(exec_times) > 1:
+        logger.info(f"The standard deviation of execution times (excluding the first run): {std_exec}\n")
+
+    return {
+        "back": back,
+        "num_warmup": num_warmup,
+        "num_execution": num_execution,
+        "avg_warmup_time": avg_warmup,
+        "std_warmup_time": std_warmup,
+        "avg_exec_time": avg_exec,
+        "std_exec_time": std_exec,
+    }
+
+
+def save_benchmark_results(
+    results: list[dict],
+    output_dir: str = "result",
+    filename: str = "benchmark_results.md",
+) -> pd.DataFrame:
+    """Convert benchmark results to DataFrame and save as markdown table."""
+    processed = []
+    for r in results:
+        row = {k: v for k, v in r.items() if k != "config"}
+        if "config" in r:
+            row.update(r["config"])
+        processed.append(row)
+    df = pd.DataFrame(processed)
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, filename)
+    with open(output_path, "w") as f:
+        f.write(df.to_markdown(index=False))
+    logger.info(f"Saved benchmark results to {output_path}")
+    return df

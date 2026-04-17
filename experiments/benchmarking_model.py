@@ -1,3 +1,5 @@
+import gc
+
 import torch
 from cs336_systems import bench_marking as benchmark
 from typing import Iterable, Iterator
@@ -39,6 +41,7 @@ def get_args():
 class benchmarking:
     def __init__(self, configs: Iterable[benchmark.ModelConfig]):
         self.configs = list(configs)
+        self.results = []
 
     def add_config(self, config: benchmark.ModelConfig) -> None:
         self.configs.append(config)
@@ -50,7 +53,18 @@ class benchmarking:
             logger.info(f"Initialized model with config: {config}")
             random_data = benchmark.random_batch(config, batch_size)
             random_data = random_data.to(device)
-            benchmark.benchmark_model(model, random_data, back, num_warmup, num_execution)
+            result = benchmark.benchmark_model(model, random_data, back, num_warmup, num_execution)
+            result["config"] = config.model_dump()
+            self.results.append(result)
+            
+            del model
+            del random_data
+
+            gc.collect()
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+
+    def save_results(self, output_dir: str = "result", filename: str = "benchmark_results.md") -> None:
+        benchmark.save_benchmark_results(self.results, output_dir, filename)
 
 
 if __name__ == "__main__":
@@ -72,7 +86,9 @@ if __name__ == "__main__":
         vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
     )
 
-    baseline_benchmark = benchmarking([small_config])
+    all_configs = [small_config, medium_config, large_config, xlarge_config, b27_config]
+    baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
         back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size
     )
+    baseline_benchmark.save_results()
