@@ -35,6 +35,7 @@ def get_args():
     parser.add_argument("--num_warmup", type=int, default=5, help="Number of warmup iterations")
     parser.add_argument("--num_execution", type=int, default=10, help="Number of execution iterations")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for input data")
+    parser.add_argument("--output", type=str, default="result/benchmark_results.md", help="Output path for benchmark results (e.g., result/benchmark_results.md)")
     return parser.parse_args()
 
 
@@ -49,7 +50,7 @@ class benchmarking:
     def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1) -> None:
         for config in self.configs:
             model = benchmark.init_model(config)
-            model.to(device)
+            model.bfloat16().to(device)
             logger.info(f"Initialized model with config: {config}")
             random_data = benchmark.random_batch(config, batch_size)
             random_data = random_data.to(device)
@@ -63,8 +64,8 @@ class benchmarking:
             gc.collect()
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    def save_results(self, output_dir: str = "result", filename: str = "benchmark_results.md") -> None:
-        benchmark.save_benchmark_results(self.results, output_dir, filename)
+    def save_results(self, output_path: str = "result/benchmark_results.md") -> None:
+        benchmark.save_benchmark_results(self.results, output_path)
 
 
 if __name__ == "__main__":
@@ -91,4 +92,4 @@ if __name__ == "__main__":
     baseline_benchmark.run_benchmark(
         back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size
     )
-    baseline_benchmark.save_results()
+    baseline_benchmark.save_results(output_path=args.output)

@@ -85,8 +85,7 @@ def benchmark_model(
 
 def save_benchmark_results(
     results: list[dict],
-    output_dir: str = "result",
-    filename: str = "benchmark_results.md",
+    output_path: str = "result/benchmark_results.md",
 ) -> pd.DataFrame:
     """Convert benchmark results to DataFrame and save as markdown table."""
     processed = []
@@ -96,8 +95,7 @@ def save_benchmark_results(
             row.update(r["config"])
         processed.append(row)
     df = pd.DataFrame(processed)
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, filename)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         f.write(df.to_markdown(index=False))
     logger.info(f"Saved benchmark results to {output_path}")
