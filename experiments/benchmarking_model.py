@@ -7,6 +7,8 @@ import logging
 import pandas as pd
 import argparse
 
+import nvtx
+domain = nvtx.get_domain("benchmarking_model")
 
 def get_device():
     if torch.cuda.is_available():
@@ -49,9 +51,14 @@ class benchmarking:
 
     def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1) -> None:
         for config in self.configs:
-            model = benchmark.init_model(config)
-            model.bfloat16().to(device)
-            logger.info(f"Initialized model with config: {config}")
+            
+            # Use NVTX to annotate the model initialization for better profiling visualization
+            with domain.range(f"init_model_{config.d_model}", color="red")
+                model = benchmark.init_model(config)
+                model.bfloat16().to(device)
+                logger.info(f"Initialized model with config: {config}")
+                torch.cuda.synchronize() if torch.cuda.is_available() else None
+    
             random_data = benchmark.random_batch(config, batch_size)
             random_data = random_data.to(device)
             result = benchmark.benchmark_model(model, random_data, back, num_warmup, num_execution)
