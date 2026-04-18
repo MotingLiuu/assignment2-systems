@@ -26,7 +26,7 @@ sync:
 
   code:
     alpha: "./cs336_systems/"
-    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/cs336_systems/cs336_syatems"
+    beta: "root@connect.bjb1.seetacloud.com:44893:/root/workspace/assignment2-systems/cs336_systems"
 
   results:
     alpha: "./experiments"
