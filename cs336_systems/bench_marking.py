@@ -8,6 +8,9 @@ import cs336_basics
 import pandas as pd
 import os
 
+import nvtx
+domain = nvtx.get_domain("bench_marking")
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,30 +35,52 @@ def init_model(config: ModelConfig) -> nn.Module:
 def random_batch(config: ModelConfig, batch_size: int) -> torch.Tensor:
     return torch.randint(0, config.vocab_size, (batch_size, config.context_length))
 
+# Initialize the optimizer for benchmarking
+def init_optimizer(model: nn.Module, lr: float = 1e-3) -> torch.optim.Optimizer:
+    return cs336_basics.optimizer.AdamW(model.parameters(), lr=lr)
+
 
 def benchmark_model(
-    model: nn.Module, data: torch.Tensor, back: bool = False, num_warmup: int = 0, num_execution: int = 0
+    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
 
-    for _ in range(num_warmup):
+    for i in range(num_warmup):
+        
         sta_time = timeit.default_timer()
-        model.forward(batch_tensor)
-        torch.cuda.synchronize() if torch.cuda.is_available() else None
+
+        # Use NVTX to annotate the forward pass for better profiling visualization
+        with nvtx.annotate(f"warmup_step{i}_forward", color="blue"):
+            model.forward(batch_tensor)
+            torch.cuda.synchronize() if torch.cuda.is_available() else None
+
         end_time = timeit.default_timer()
         warmup_times.append(end_time - sta_time)
     logger.info(f"Done Warmup times: {warmup_times}")
 
-    for _ in range(num_execution):
+    for i in range(num_execution):
         sta_time = timeit.default_timer()
-        logits = model.forward(batch_tensor)
+
+        # Use NVTX to annotate the forward pass for better profiling visualization
+        with nvtx.annotate(f"execution_step{i}_forward", color="green"):
+            logits = model.forward(batch_tensor)
+            torch.cuda.synchronize() if torch.cuda.is_available() else None
 
         if back:
-            loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
-            loss.backward()
+            # Use NVTX to annotate the backward pass for better profiling visualization
+            with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
+                loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+                loss.backward()
+                torch.cuda.synchronize() if torch.cuda.is_available() else None
+                
+            if optim is not None:
+                # Use NVTX to annotate the optimization step for better profiling visualization
+                with nvtx.annotate(f"execution_step{i}_optim", color="red"):
+                    optim.step()
+                    optim.zero_grad()
+                    torch.cuda.synchronize() if torch.cuda.is_available() else None
 
-        torch.cuda.synchronize() if torch.cuda.is_available() else None
         end_time = timeit.default_timer()
         exec_times.append(end_time - sta_time)
     logger.info(f"Done Execution times: {exec_times}")
