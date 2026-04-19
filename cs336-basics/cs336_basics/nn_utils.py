@@ -1,6 +1,8 @@
 import torch
+import nvtx
 
-
+# Use nvtx to annotate the softmax function
+@nvtx.annotate("softmax", color="cyan", domain="nn_utils")
 def softmax(x, dim=-1):
     rescaled_input = x - torch.max(x, dim=dim, keepdim=True)[0]
     exponentiated_rescaled_input = torch.exp(rescaled_input)
