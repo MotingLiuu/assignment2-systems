@@ -39,6 +39,7 @@ def get_args():
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for input data")
     parser.add_argument("--output", type=str, default="result/benchmark_results.md", help="Output path for benchmark results (e.g., result/benchmark_results.md)")
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
+    parser.add_argument("--memo_profile", action="store_true", help="Enable memory profiling during benchmarking")
     return parser.parse_args()
 
 
@@ -50,7 +51,7 @@ class benchmarking:
     def add_config(self, config: benchmark.ModelConfig) -> None:
         self.configs.append(config)
 
-    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False) -> None:
+    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: bool = False) -> None:
         for config in self.configs:
             
             # Use NVTX to annotate the model initialization for better profiling visualization
@@ -68,7 +69,7 @@ class benchmarking:
             if optim:
                 optimizer = benchmark.init_optimizer(model, lr=1e-3)
 
-            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution)
+            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution, memo_profile=memo_profile)
             result["config"] = config.model_dump()
             self.results.append(result)
             
@@ -97,13 +98,19 @@ if __name__ == "__main__":
     xlarge_config = benchmark.ModelConfig(
         vocab_size=10000, context_length=1024, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
     )
-    b27_config = benchmark.ModelConfig(
+    b27_config_128 = benchmark.ModelConfig(
+        vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
+    )
+    b27_config_256 = benchmark.ModelConfig(
+        vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
+    )
+    b27_config_512 = benchmark.ModelConfig(
         vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
     )
 
-    all_configs = [small_config, medium_config, large_config, xlarge_config, b27_config]
+    all_configs = [b27_config_128, b27_config_256, b27_config_512]
     baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
-        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim
+        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile
     )
     baseline_benchmark.save_results(output_path=args.output)
