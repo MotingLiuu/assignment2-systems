@@ -41,6 +41,7 @@ def get_args():
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
     parser.add_argument("--memo_profile", action="store_true", help="Enable memory profiling during benchmarking")
     parser.add_argument("--mix_precision", action="store_true", help="Enable mixed precision during benchmarking")
+    parser.add_argument("--memop_path", type=str, default="result/memory_profiles.pickle", help="Output path for memory profiles (e.g., result/memory_profiles.pickle)")
     return parser.parse_args()
 
 
@@ -79,8 +80,8 @@ class benchmarking:
             gc.collect()
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    def save_results(self, output_path: str = "result/benchmark_results.md") -> None:
-        benchmark.save_benchmark_results(self.results, output_path)
+    def save_results(self, output_path: str = "result/benchmark_results.md", memop_path: str = "result/memory_profiles.pickle") -> None:
+        benchmark.save_benchmark_results(self.results, output_path, memop_path)
 
 
 if __name__ == "__main__":
@@ -113,4 +114,4 @@ if __name__ == "__main__":
     baseline_benchmark.run_benchmark(
         back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision
     )
-    baseline_benchmark.save_results(output_path=args.output)
+    baseline_benchmark.save_results(output_path=args.output, memop_path=args.memop_path)
