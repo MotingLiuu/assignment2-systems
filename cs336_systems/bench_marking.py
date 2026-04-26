@@ -134,17 +134,25 @@ def benchmark_model(
 def save_benchmark_results(
     results: list[dict],
     output_path: str = "result/benchmark_results.md",
+    memop_path: str = "result/memory_profiles.pickle",
 ) -> pd.DataFrame:
     """Convert benchmark results to DataFrame and save as markdown table."""
     processed = []
     for r in results:
-        row = {k: v for k, v in r.items() if k != "config"}
+        row = {k: v for k, v in r.items() if k not in ("config", "memory_snapshot")}
         if "config" in r:
             row.update(r["config"])
+        if "memory_snapshot" in r and r["memory_snapshot"] is not None:
+            os.makedirs(os.path.dirname(memop_path), exist_ok=True)
+            with open(memop_path, "wb") as f:
+                f.write(r["memory_snapshot"])
+            logger.info(f"Saved memory profile to {memop_path}")
         processed.append(row)
     df = pd.DataFrame(processed)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         f.write(df.to_markdown(index=False))
     logger.info(f"Saved benchmark results to {output_path}")
+
+    
     return df
