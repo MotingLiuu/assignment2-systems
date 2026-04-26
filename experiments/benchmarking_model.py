@@ -40,6 +40,7 @@ def get_args():
     parser.add_argument("--output", type=str, default="result/benchmark_results.md", help="Output path for benchmark results (e.g., result/benchmark_results.md)")
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
     parser.add_argument("--memo_profile", action="store_true", help="Enable memory profiling during benchmarking")
+    parser.add_argument("--mix_precision", action="store_true", help="Enable mixed precision during benchmarking")
     return parser.parse_args()
 
 
@@ -51,13 +52,12 @@ class benchmarking:
     def add_config(self, config: benchmark.ModelConfig) -> None:
         self.configs.append(config)
 
-    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: bool = False) -> None:
+    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: bool = False, mix_precision: bool = False) -> None:
         for config in self.configs:
             
             # Use NVTX to annotate the model initialization for better profiling visualization
             with nvtx.annotate(f"model_init_{config.d_model}d_{config.num_layers}l", color="purple"):
-                model = benchmark.init_model(config)
-                model.bfloat16().to(device)
+                model = benchmark.init_model(config).to(device)
                 logger.info(f"Initialized model with config: {config}")
                 torch.cuda.synchronize() if torch.cuda.is_available() else None
     
@@ -69,7 +69,7 @@ class benchmarking:
             if optim:
                 optimizer = benchmark.init_optimizer(model, lr=1e-3)
 
-            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution, memo_profile=memo_profile)
+            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution, mixed_precision=mix_precision, memo_profile=memo_profile)
             result["config"] = config.model_dump()
             self.results.append(result)
             
@@ -111,6 +111,6 @@ if __name__ == "__main__":
     all_configs = [b27_config_128, b27_config_256, b27_config_512]
     baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
-        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile
+        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision
     )
     baseline_benchmark.save_results(output_path=args.output)

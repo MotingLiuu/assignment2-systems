@@ -41,7 +41,7 @@ def init_optimizer(model: nn.Module, lr: float = 1e-3) -> torch.optim.Optimizer:
 
 
 def benchmark_model(
-    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, memo_profile: bool = False
+    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, mixed_precision: bool = False, memo_profile: bool = False
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
@@ -52,7 +52,13 @@ def benchmark_model(
 
         # Use NVTX to annotate the forward pass for better profiling visualization
         with nvtx.annotate(f"warmup_step{i}_forward", color="blue"):
-            model.forward(batch_tensor)
+            
+            # use mixed precision for the forward pass if mix_precision is enabled
+            if mixed_precision:
+                with torch.cuda.amp.autocast():
+                    model.forward(batch_tensor)
+            else:
+                model.forward(batch_tensor)
             torch.cuda.synchronize() if torch.cuda.is_available() else None
 
         end_time = timeit.default_timer()
@@ -68,7 +74,13 @@ def benchmark_model(
 
         # Use NVTX to annotate the forward pass for better profiling visualization
         with nvtx.annotate(f"execution_step{i}_forward", color="green"):
-            logits = model.forward(batch_tensor)
+            
+            # Use mixed precision for the forward pass if mix_precision is enabled
+            if mixed_precision:
+                with torch.cuda.amp.autocast():
+                    logits = model.forward(batch_tensor)
+            else:
+                logits = model.forward(batch_tensor)
             torch.cuda.synchronize() if torch.cuda.is_available() else None
 
         if back:
