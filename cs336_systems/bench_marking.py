@@ -66,6 +66,7 @@ def benchmark_model(
     logger.info(f"Done Warmup times: {warmup_times}")
 
     # Start Recording memory history
+    snapshot_data = None
     if memo_profile and torch.cuda.is_available():
         torch.cuda.memory._record_memory_history(max_entries=1000000) 
 
@@ -99,7 +100,7 @@ def benchmark_model(
         
         # End recording memory history after the execution loop
         if memo_profile and torch.cuda.is_available():
-            torch.cuda.memory._dump_snapshot("memory_history.pickle")
+            snapshot_data = torch.cuda.memory._dump_snapshot()
             torch.cuda.memory._record_memory_history(enabled=None)
 
         end_time = timeit.default_timer()
@@ -126,6 +127,7 @@ def benchmark_model(
         "std_warmup_time": std_warmup,
         "avg_exec_time": avg_exec,
         "std_exec_time": std_exec,
+        "memory_snapshot": snapshot_data,
     }
 
 
