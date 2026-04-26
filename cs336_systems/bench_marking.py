@@ -41,7 +41,7 @@ def init_optimizer(model: nn.Module, lr: float = 1e-3) -> torch.optim.Optimizer:
 
 
 def benchmark_model(
-    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0
+    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, memo_profile: bool = False
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
@@ -58,6 +58,10 @@ def benchmark_model(
         end_time = timeit.default_timer()
         warmup_times.append(end_time - sta_time)
     logger.info(f"Done Warmup times: {warmup_times}")
+
+    # Start Recording memory history
+    if memo_profile and torch.cuda.is_available():
+        torch.cuda.memory._record_memory_history(max_entries=1000000) 
 
     for i in range(num_execution):
         sta_time = timeit.default_timer()
@@ -80,6 +84,11 @@ def benchmark_model(
                     optim.step()
                     optim.zero_grad()
                     torch.cuda.synchronize() if torch.cuda.is_available() else None
+        
+        # End recording memory history after the execution loop
+        if memo_profile and torch.cuda.is_available():
+            torch.cuda.memory._dump_snapshot("memory_history.pickle")
+            torch.cuda.memory._record_memory_history(enabled=None)
 
         end_time = timeit.default_timer()
         exec_times.append(end_time - sta_time)
