@@ -39,6 +39,7 @@ def get_args():
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for input data")
     parser.add_argument("--output", type=str, default="result/benchmark_results.md", help="Output path for benchmark results (e.g., result/benchmark_results.md)")
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
+    parser.add_argument("--mix_precision", action="store_true", help="Enable mixed precision for benchmarking")
     parser.add_argument("--memo_profile", type=str, default=None,
                         help="Output path for memory profile snapshot")
     parser.add_argument("--profiler_result", type=str, default=None,

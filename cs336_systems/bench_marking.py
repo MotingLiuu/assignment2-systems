@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 import cs336_basics
 import pandas as pd
 import os
+from torch.profiler import profile, record_function, ProfilerActivity
 
 import nvtx
 domain = nvtx.get_domain("bench_marking")
@@ -85,38 +86,42 @@ def benchmark_model(
     with profiler_cm as prof:
 
         for i in range(num_execution):
-            sta_time = timeit.default_timer()
-
-            # Use NVTX to annotate the forward pass for better profiling visualization
-            with nvtx.annotate(f"execution_step{i}_forward", color="green"):
-                
-                # Use mixed precision for the forward pass if mix_precision is enabled
-                if mixed_precision:
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with record_function("## forward ##"):
+                sta_time = timeit.default_timer()
+    
+                # Use NVTX to annotate the forward pass for better profiling visualization
+                with nvtx.annotate(f"execution_step{i}_forward", color="green"):
+                    
+                    # Use mixed precision for the forward pass if mix_precision is enabled
+                    if mixed_precision:
+                        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                            logits = model.forward(batch_tensor)
+                    else:
                         logits = model.forward(batch_tensor)
-                else:
-                    logits = model.forward(batch_tensor)
-                torch.cuda.synchronize() if torch.cuda.is_available() else None
+                    torch.cuda.synchronize() if torch.cuda.is_available() else None
     
             if back:
-                # Use NVTX to annotate the backward pass for better profiling visualization
-                with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
-                    loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
-                    loss.backward()
-                    torch.cuda.synchronize() if torch.cuda.is_available() else None
-                    
-                if optim is not None:
-                    # Use NVTX to annotate the optimization step for better profiling visualization
-                    with nvtx.annotate(f"execution_step{i}_optim", color="red"):
-                        optim.step()
-                        optim.zero_grad()
+                with record_function("## backward ##"):
+                    # Use NVTX to annotate the backward pass for better profiling visualization
+                    with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
+                        loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+                        loss.backward()
                         torch.cuda.synchronize() if torch.cuda.is_available() else None
-            
+                        
+                if optim is not None:
+                    with record_function("## optimization ##"):
+                        # Use NVTX to annotate the optimization step for better profiling visualization
+                        with nvtx.annotate(f"execution_step{i}_optim", color="red"):
+                            optim.step()
+                            optim.zero_grad()
+                            torch.cuda.synchronize() if torch.cuda.is_available() else None
+                
             end_time = timeit.default_timer()
             exec_times.append(end_time - sta_time)
-    
+            prof.step() if prof is not None else None
+
     if prof is not None and profiler_result is not None:
-        prof.export_chrome_trace(profiler_result)
+        prof.export_memory_timeline(f"{profiler_result}.html", device="cuda")
         logger.info(f"Saved profiler trace to {profiler_result}")
 
 
