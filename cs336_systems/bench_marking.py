@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import timeit
 import torch
 from torch import nn as nn
@@ -41,7 +42,7 @@ def init_optimizer(model: nn.Module, lr: float = 1e-3) -> torch.optim.Optimizer:
 
 
 def benchmark_model(
-    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, mixed_precision: bool = False, memo_profile: str | None = None
+    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, mixed_precision: bool = False, memo_profile: str | None = None, profiler_result: str | None = None
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
@@ -67,38 +68,58 @@ def benchmark_model(
 
     # Start Recording memory history
     if memo_profile and torch.cuda.is_available():
-        torch.cuda.memory._record_memory_history(max_entries=1000000) 
+        torch.cuda.memory._record_memory_history(max_entries=1000000)
 
-    for i in range(num_execution):
-        sta_time = timeit.default_timer()
+    profiler_cm = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(wait=0, warmup=0, active=num_execution, repeat=1),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+        with_flops=True,
+    ) if profiler_result and torch.cuda.is_available() else nullcontext()
+    
+    with profiler_cm as prof:
 
-        # Use NVTX to annotate the forward pass for better profiling visualization
-        with nvtx.annotate(f"execution_step{i}_forward", color="green"):
-            
-            # Use mixed precision for the forward pass if mix_precision is enabled
-            if mixed_precision:
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    logits = model.forward(batch_tensor)
-            else:
-                logits = model.forward(batch_tensor)
-            torch.cuda.synchronize() if torch.cuda.is_available() else None
+        for i in range(num_execution):
+            sta_time = timeit.default_timer()
 
-        if back:
-            # Use NVTX to annotate the backward pass for better profiling visualization
-            with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
-                loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
-                loss.backward()
-                torch.cuda.synchronize() if torch.cuda.is_available() else None
+            # Use NVTX to annotate the forward pass for better profiling visualization
+            with nvtx.annotate(f"execution_step{i}_forward", color="green"):
                 
-            if optim is not None:
-                # Use NVTX to annotate the optimization step for better profiling visualization
-                with nvtx.annotate(f"execution_step{i}_optim", color="red"):
-                    optim.step()
-                    optim.zero_grad()
+                # Use mixed precision for the forward pass if mix_precision is enabled
+                if mixed_precision:
+                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        logits = model.forward(batch_tensor)
+                else:
+                    logits = model.forward(batch_tensor)
+                torch.cuda.synchronize() if torch.cuda.is_available() else None
+    
+            if back:
+                # Use NVTX to annotate the backward pass for better profiling visualization
+                with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
+                    loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+                    loss.backward()
                     torch.cuda.synchronize() if torch.cuda.is_available() else None
-        
-        end_time = timeit.default_timer()
-        exec_times.append(end_time - sta_time)
+                    
+                if optim is not None:
+                    # Use NVTX to annotate the optimization step for better profiling visualization
+                    with nvtx.annotate(f"execution_step{i}_optim", color="red"):
+                        optim.step()
+                        optim.zero_grad()
+                        torch.cuda.synchronize() if torch.cuda.is_available() else None
+            
+            end_time = timeit.default_timer()
+            exec_times.append(end_time - sta_time)
+    
+    if prof is not None and profiler_result is not None:
+        prof.export_chrome_trace(profiler_result)
+        logger.info(f"Saved profiler trace to {profiler_result}")
+
+
     # End recording memory history after the execution loop
     if memo_profile and torch.cuda.is_available():
         torch.cuda.memory._dump_snapshot(memo_profile)

@@ -41,6 +41,8 @@ def get_args():
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
     parser.add_argument("--memo_profile", type=str, default=None,
                         help="Output path for memory profile snapshot")
+    parser.add_argument("--profiler_result", type=str, default=None,
+                        help="Output path for profiler trace (e.g., result/profiler_trace.json)")
     return parser.parse_args()
 
 
@@ -52,7 +54,7 @@ class benchmarking:
     def add_config(self, config: benchmark.ModelConfig) -> None:
         self.configs.append(config)
 
-    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: str | None = None, mix_precision: bool = False) -> None:
+    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: str | None = None, mix_precision: bool = False, profiler_result: str | None = None) -> None:
         for config in self.configs:
             
             # Use NVTX to annotate the model initialization for better profiling visualization
@@ -69,7 +71,7 @@ class benchmarking:
             if optim:
                 optimizer = benchmark.init_optimizer(model, lr=1e-3)
 
-            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution, mixed_precision=mix_precision, memo_profile=memo_profile)
+            result = benchmark.benchmark_model(model, random_data, back, optim=optimizer if optim else None, num_warmup=num_warmup, num_execution=num_execution, mixed_precision=mix_precision, memo_profile=memo_profile, profiler_result=profiler_result)
             result["config"] = config.model_dump()
             self.results.append(result)
             
@@ -120,6 +122,6 @@ if __name__ == "__main__":
     all_configs = [xlarge_config_128, xlarge_config_256, xlarge_config_512]
     baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
-        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision
+        back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision, profiler_result=args.profiler_result
     )
     baseline_benchmark.save_results(output_path=args.output)
