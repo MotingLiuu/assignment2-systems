@@ -41,7 +41,7 @@ def init_optimizer(model: nn.Module, lr: float = 1e-3) -> torch.optim.Optimizer:
 
 
 def benchmark_model(
-    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, mixed_precision: bool = False, memo_profile: bool = False
+    model: nn.Module, data: torch.Tensor, back: bool = False, optim: torch.optim.Optimizer | None = None, num_warmup: int = 0, num_execution: int = 0, mixed_precision: bool = False, memo_profile: str | None = None
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
@@ -66,7 +66,6 @@ def benchmark_model(
     logger.info(f"Done Warmup times: {warmup_times}")
 
     # Start Recording memory history
-    snapshot_data = None
     if memo_profile and torch.cuda.is_available():
         torch.cuda.memory._record_memory_history(max_entries=1000000) 
 
@@ -98,13 +97,13 @@ def benchmark_model(
                     optim.zero_grad()
                     torch.cuda.synchronize() if torch.cuda.is_available() else None
         
-        # End recording memory history after the execution loop
-        if memo_profile and torch.cuda.is_available():
-            snapshot_data = torch.cuda.memory._dump_snapshot()
-            torch.cuda.memory._record_memory_history(enabled=None)
-
         end_time = timeit.default_timer()
         exec_times.append(end_time - sta_time)
+    # End recording memory history after the execution loop
+    if memo_profile and torch.cuda.is_available():
+        torch.cuda.memory._dump_snapshot(memo_profile)
+        torch.cuda.memory._record_memory_history(enabled=None)
+
     logger.info(f"Done Execution times: {exec_times}")
     assert len(warmup_times) == num_warmup, f"Expected {num_warmup} warmup times, got {len(warmup_times)}"
     assert len(exec_times) == num_execution, f"Expected {num_execution} execution times, got {len(exec_times)}"
@@ -127,32 +126,23 @@ def benchmark_model(
         "std_warmup_time": std_warmup,
         "avg_exec_time": avg_exec,
         "std_exec_time": std_exec,
-        "memory_snapshot": snapshot_data,
     }
 
 
 def save_benchmark_results(
     results: list[dict],
     output_path: str = "result/benchmark_results.md",
-    memop_path: str = "result/memory_profiles.pickle",
 ) -> pd.DataFrame:
     """Convert benchmark results to DataFrame and save as markdown table."""
     processed = []
     for r in results:
-        row = {k: v for k, v in r.items() if k not in ("config", "memory_snapshot")}
+        row = {k: v for k, v in r.items() if k != "config"}
         if "config" in r:
             row.update(r["config"])
-        if "memory_snapshot" in r and r["memory_snapshot"] is not None:
-            os.makedirs(os.path.dirname(memop_path), exist_ok=True)
-            with open(memop_path, "wb") as f:
-                f.write(r["memory_snapshot"])
-            logger.info(f"Saved memory profile to {memop_path}")
         processed.append(row)
     df = pd.DataFrame(processed)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         f.write(df.to_markdown(index=False))
     logger.info(f"Saved benchmark results to {output_path}")
-
-    
     return df

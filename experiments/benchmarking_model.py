@@ -39,9 +39,8 @@ def get_args():
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for input data")
     parser.add_argument("--output", type=str, default="result/benchmark_results.md", help="Output path for benchmark results (e.g., result/benchmark_results.md)")
     parser.add_argument("--optim", action="store_true", help="Enable optimization step during benchmarking")
-    parser.add_argument("--memo_profile", action="store_true", help="Enable memory profiling during benchmarking")
-    parser.add_argument("--mix_precision", action="store_true", help="Enable mixed precision during benchmarking")
-    parser.add_argument("--memop_path", type=str, default="result/memory_profiles.pickle", help="Output path for memory profiles (e.g., result/memory_profiles.pickle)")
+    parser.add_argument("--memo_profile", type=str, default=None,
+                        help="Output path for memory profile snapshot")
     return parser.parse_args()
 
 
@@ -53,7 +52,7 @@ class benchmarking:
     def add_config(self, config: benchmark.ModelConfig) -> None:
         self.configs.append(config)
 
-    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: bool = False, mix_precision: bool = False) -> None:
+    def run_benchmark(self, back: bool = False, num_warmup: int = 0, num_execution: int = 0, batch_size=1, optim: bool = False, memo_profile: str | None = None, mix_precision: bool = False) -> None:
         for config in self.configs:
             
             # Use NVTX to annotate the model initialization for better profiling visualization
@@ -80,8 +79,8 @@ class benchmarking:
             gc.collect()
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    def save_results(self, output_path: str = "result/benchmark_results.md", memop_path: str = "result/memory_profiles.pickle") -> None:
-        benchmark.save_benchmark_results(self.results, output_path, memop_path)
+    def save_results(self, output_path: str = "result/benchmark_results.md") -> None:
+        benchmark.save_benchmark_results(self.results, output_path)
 
 
 if __name__ == "__main__":
@@ -99,19 +98,28 @@ if __name__ == "__main__":
     xlarge_config = benchmark.ModelConfig(
         vocab_size=10000, context_length=1024, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
     )
+    xlarge_config_128 = benchmark.ModelConfig(
+        vocab_size=10000, context_length=128, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
+    )
+    xlarge_config_256 = benchmark.ModelConfig(
+        vocab_size=10000, context_length=256, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
+    )
+    xlarge_config_512 = benchmark.ModelConfig(
+        vocab_size=10000, context_length=512, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
+    )
     b27_config_128 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=128, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
+        vocab_size=10000, context_length=128, d_model=2560, num_layers=24, num_heads=32, d_ff=6400
     )
     b27_config_256 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=256, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
+        vocab_size=10000, context_length=256, d_model=2560, num_layers=24, num_heads=32, d_ff=6400
     )
     b27_config_512 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=512, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
+        vocab_size=10000, context_length=512, d_model=2560, num_layers=24, num_heads=32, d_ff=6400
     )
 
-    all_configs = [b27_config_128, b27_config_256, b27_config_512]
+    all_configs = [xlarge_config_128, xlarge_config_256, xlarge_config_512]
     baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
         back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision
     )
-    baseline_benchmark.save_results(output_path=args.output, memop_path=args.memop_path)
+    baseline_benchmark.save_results(output_path=args.output)
