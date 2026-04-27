@@ -55,7 +55,7 @@ def benchmark_model(
             
             # use mixed precision for the forward pass if mix_precision is enabled
             if mixed_precision:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                     model.forward(batch_tensor)
             else:
                 model.forward(batch_tensor)
@@ -78,7 +78,7 @@ def benchmark_model(
             
             # Use mixed precision for the forward pass if mix_precision is enabled
             if mixed_precision:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                     logits = model.forward(batch_tensor)
             else:
                 logits = model.forward(batch_tensor)
