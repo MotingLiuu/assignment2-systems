@@ -100,13 +100,13 @@ if __name__ == "__main__":
         vocab_size=10000, context_length=1024, d_model=1600, num_layers=48, num_heads=25, d_ff=6400
     )
     b27_config_128 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
+        vocab_size=10000, context_length=128, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
     )
     b27_config_256 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
+        vocab_size=10000, context_length=256, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
     )
     b27_config_512 = benchmark.ModelConfig(
-        vocab_size=10000, context_length=1024, d_model=2560, num_layers=32, num_heads=32, d_ff=10240
+        vocab_size=10000, context_length=512, d_model=2560, num_layers=24, num_heads=24, d_ff=10240
     )
 
     all_configs = [b27_config_128, b27_config_256, b27_config_512]
