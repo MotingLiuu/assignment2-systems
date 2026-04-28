@@ -120,7 +120,7 @@ if __name__ == "__main__":
         vocab_size=10000, context_length=512, d_model=2560, num_layers=24, num_heads=32, d_ff=6400
     )
 
-    all_configs = [xlarge_config_128, xlarge_config_256, xlarge_config_512, xlarge_config]
+    all_configs = [xlarge_config]
     baseline_benchmark = benchmarking(all_configs)
     baseline_benchmark.run_benchmark(
         back=args.back, num_warmup=args.num_warmup, num_execution=args.num_execution, batch_size=args.batch_size, optim=args.optim, memo_profile=args.memo_profile, mix_precision=args.mix_precision, profiler_result=args.profiler_result
