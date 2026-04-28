@@ -18,6 +18,8 @@ dependencies = [
     "pandas>=2",
     "ty>=0.0.1a16",
     "nvtx>=0.2.15",
+    "tensorboard>=2.20.0",
+    "torch-tb-profiler>=0.4.3",
 ]
 
 [build-system]
@@ -31,6 +33,11 @@ module-root = ""
 [tool.uv]
 package = true
 python-preference = "managed"
+
+[[tool.uv.index]]
+name = "volces"
+url = "https://mirrors.volces.com/pypi/simple/"
+default = true  
 
 [tool.uv.sources]
 cs336-basics = { path = "./cs336-basics", editable = true }  # Change this path to your assignment1-basics repo you want to use your own implementation!
