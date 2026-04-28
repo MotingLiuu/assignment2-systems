@@ -47,6 +47,7 @@ def benchmark_model(
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
+    bcm = nullcontext() if back else torch.no_grad()
 
     for i in range(num_warmup):
         
@@ -54,14 +55,14 @@ def benchmark_model(
 
         # Use NVTX to annotate the forward pass for better profiling visualization
         with nvtx.annotate(f"warmup_step{i}_forward", color="blue"):
-            
-            # use mixed precision for the forward pass if mix_precision is enabled
-            if mixed_precision:
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    model.forward(batch_tensor)
-            else:
-                model.forward(batch_tensor)
-            torch.cuda.synchronize() if torch.cuda.is_available() else None
+            with bcm:
+                # use mixed precision for the forward pass if mix_precision is enabled
+                if mixed_precision:
+                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        model(batch_tensor)
+                else:
+                    model(batch_tensor)
+                torch.cuda.synchronize() if torch.cuda.is_available() else None
 
         end_time = timeit.default_timer()
         warmup_times.append(end_time - sta_time)
@@ -92,14 +93,15 @@ def benchmark_model(
                 # Use NVTX to annotate the forward pass for better profiling visualization
                 with nvtx.annotate(f"execution_step{i}_forward", color="green"):
                     
-                    # Use mixed precision for the forward pass if mix_precision is enabled
-                    if mixed_precision:
-                        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                            logits = model.forward(batch_tensor)
-                    else:
-                        logits = model.forward(batch_tensor)
-                    torch.cuda.synchronize() if torch.cuda.is_available() else None
-    
+                    with bcm:
+                        # Use mixed precision for the forward pass if mix_precision is enabled
+                        if mixed_precision:
+                            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                                logits = model(batch_tensor)
+                        else:
+                            logits = model(batch_tensor)
+                        torch.cuda.synchronize() if torch.cuda.is_available() else None
+        
             if back:
                 with record_function("## backward ##"):
                     # Use NVTX to annotate the backward pass for better profiling visualization
@@ -121,7 +123,7 @@ def benchmark_model(
             prof.step() if prof is not None else None
 
     if prof is not None and profiler_result is not None:
-        prof.export_memory_timeline(f"{profiler_result}.html", device="cuda")
+        prof.export_memory_timeline(f"{profiler_result}.html")
         logger.info(f"Saved profiler trace to {profiler_result}")
 
 
