@@ -47,104 +47,88 @@ def benchmark_model(
 ) -> dict:
     batch_tensor, targets = data[:, :-1], data[:, 1:]
     warmup_times, exec_times = [], []
-    bcm = nullcontext() if back else torch.no_grad()
+    
+    grad_cm = nullcontext() if back else torch.no_grad()
+    amp_cm = torch.autocast(device_type="cuda", dtype=torch.bfloat16) if mixed_precision else nullcontext()
 
     for i in range(num_warmup):
-        
         sta_time = timeit.default_timer()
 
-        # Use NVTX to annotate the forward pass for better profiling visualization
-        with nvtx.annotate(f"warmup_step{i}_forward", color="blue"):
-            with bcm:
-                # use mixed precision for the forward pass if mix_precision is enabled
-                if mixed_precision:
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        model(batch_tensor)
-                else:
-                    model(batch_tensor)
-                torch.cuda.synchronize() if torch.cuda.is_available() else None
+        with nvtx.annotate(f"warmup_step{i}", color="blue"):
+            with grad_cm, amp_cm:
+                logits = model(batch_tensor)
+                if back:
+                    loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+            
+            if back:
+                loss.backward()
+                if optim is not None:
+                    optim.step()
+                    optim.zero_grad(set_to_none=True) 
+            torch.cuda.synchronize() if torch.cuda.is_available() else None
 
         end_time = timeit.default_timer()
         warmup_times.append(end_time - sta_time)
     logger.info(f"Done Warmup times: {warmup_times}")
 
-    # Start Recording memory history
     if memo_profile and torch.cuda.is_available():
         torch.cuda.memory._record_memory_history(max_entries=1000000)
 
     profiler_cm = torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         schedule=torch.profiler.schedule(wait=0, warmup=0, active=num_execution, repeat=1),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-        with_flops=True,
+        record_shapes=True, profile_memory=True, with_stack=True, with_flops=True,
     ) if profiler_result and torch.cuda.is_available() else nullcontext()
     
     with profiler_cm as prof:
-
         for i in range(num_execution):
+            sta_time = timeit.default_timer()
+            
             with record_function("## forward ##"):
-                sta_time = timeit.default_timer()
-    
-                # Use NVTX to annotate the forward pass for better profiling visualization
                 with nvtx.annotate(f"execution_step{i}_forward", color="green"):
-                    
-                    with bcm:
-                        # Use mixed precision for the forward pass if mix_precision is enabled
-                        if mixed_precision:
-                            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                                logits = model(batch_tensor)
-                        else:
-                            logits = model(batch_tensor)
-                        torch.cuda.synchronize() if torch.cuda.is_available() else None
+                    with grad_cm, amp_cm:  
+                        logits = model(batch_tensor)
+                        if back:
+                            loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
+                    torch.cuda.synchronize() if torch.cuda.is_available() else None
         
             if back:
                 with record_function("## backward ##"):
-                    # Use NVTX to annotate the backward pass for better profiling visualization
                     with nvtx.annotate(f"execution_step{i}_backward", color="orange"):
-                        loss = cs336_basics.nn_utils.cross_entropy(logits, targets)
-                        loss.backward()
+                        loss.backward() 
                         torch.cuda.synchronize() if torch.cuda.is_available() else None
                         
                 if optim is not None:
                     with record_function("## optimization ##"):
-                        # Use NVTX to annotate the optimization step for better profiling visualization
                         with nvtx.annotate(f"execution_step{i}_optim", color="red"):
                             optim.step()
-                            optim.zero_grad()
+                            optim.zero_grad(set_to_none=True)
                             torch.cuda.synchronize() if torch.cuda.is_available() else None
                 
             end_time = timeit.default_timer()
             exec_times.append(end_time - sta_time)
-            prof.step() if prof is not None else None
+            if prof is not None:
+                prof.step()
 
     if prof is not None and profiler_result is not None:
         prof.export_memory_timeline(f"{profiler_result}.html")
         logger.info(f"Saved profiler trace to {profiler_result}")
 
-
-    # End recording memory history after the execution loop
     if memo_profile and torch.cuda.is_available():
         torch.cuda.memory._dump_snapshot(memo_profile)
         torch.cuda.memory._record_memory_history(enabled=None)
 
     logger.info(f"Done Execution times: {exec_times}")
-    assert len(warmup_times) == num_warmup, f"Expected {num_warmup} warmup times, got {len(warmup_times)}"
-    assert len(exec_times) == num_execution, f"Expected {num_execution} execution times, got {len(exec_times)}"
+    assert len(warmup_times) == num_warmup
+    assert len(exec_times) == num_execution
 
     avg_warmup = sum(warmup_times) / len(warmup_times) if warmup_times else 0
-    std_warmup = float(torch.std(torch.tensor(warmup_times))) if warmup_times else 0
+    std_warmup = float(torch.std(torch.tensor(warmup_times))) if len(warmup_times) > 1 else 0
     avg_exec = sum(exec_times) / len(exec_times) if exec_times else 0
-    std_exec = float(torch.std(torch.tensor(exec_times[1:]))) if len(exec_times) > 1 else 0
+    std_exec = float(torch.std(torch.tensor(exec_times))) if len(exec_times) > 1 else 0 
 
     logger.info(f"Avg Warmup time: {avg_warmup}, the standard deviation: {std_warmup}\n")
     logger.info(f"Avg Execution time: {avg_exec}, Back: {back}\n")
-    if len(exec_times) > 1:
-        logger.info(f"The standard deviation of execution times (excluding the first run): {std_exec}\n")
 
     return {
         "back": back,
